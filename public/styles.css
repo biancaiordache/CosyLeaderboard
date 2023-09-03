@@ -1,0 +1,111 @@
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #f4f4f4;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.title-container h1,
+.title-container h2 {
+    text-align: center;
+}
+
+.title-container h1 {
+    font-size: 36px;  /* You can adjust the value based on your preference */
+}
+
+.title-container h2 {
+    font-weight: normal;
+    color: #555;  /* Adjust to your preferred shade */
+}
+
+.title-container {
+    max-width: 600px;
+    width: 100%;
+    text-align: center;
+    margin-bottom: 20px;
+    box-sizing: border-box;
+    display: block;  /* This will make it span the full width by default */
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 10px;
+    color: #333;
+    font-weight: 700;
+    width: 100%;
+}
+
+h2 {
+    font-size: 18px;
+    color: #666;
+    width: 100%;
+}
+
+table {
+    width: 100%;
+    max-width: 600px;
+    border-collapse: collapse;
+    background-color: #ffffff;
+    box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.1);
+}
+
+th,
+td {
+    padding: 10px 15px;
+    text-align: left;
+    border-bottom: 1px solid #e1e1e1;
+    flex: 1;
+    text-align: left;
+}
+
+td {
+    font-size: 18px;
+}
+
+/* Make the first and third column (Rank and Streak) values bold */
+td:nth-child(1), td:nth-child(3) {
+    font-weight: bold;
+}
+
+/* Add more padding to the left of Rank */
+td:nth-child(1) {
+    padding-left: 25px;  /* Adjust the value to your liking */
+}
+
+td img {
+    vertical-align: middle;
+    margin-right: 10px;
+    border-radius: 10px;
+}
+
+th {
+    background-color: #f7f7f7;
+    font-weight: 400;
+}
+
+tr:hover {
+    background-color: #f7f7f7;
+}
+      /* For the darker green rows */
+tr:nth-child(odd) {
+    background-color: #4ec78d;  /* Adjust this value if you want a different shade of green */
+}
+
+/* For the lighter green rows */
+tr:nth-child(even) {
+    background-color: #95ddba;  /* Adjust this value if you want a different shade of green */
+}
+/* Responsive styling */
+@media (max-width: 600px) {
+    th,
+    td {
+        padding: 10px 5px;
+    }
+
+    table {
+        box-shadow: none;
+    }
+}
