@@ -53,7 +53,7 @@ app.get('/leaderboard', (req, res) => {
 
 slackEvents.on('message', async (event) => {
     try {
-        const targetChannelId = "C012943FV6Y"; // testchannel for now
+        const targetChannelId = "C012943FV6Y"; // #_shipped channel
 
         if (event.subtype && event.subtype === 'bot_message' || // Ignore bot messages
             event.channel !== targetChannelId || // Ignore messages from other channels
