@@ -38,6 +38,16 @@ h1 {
     width: 100%;
 }
 
+.page-title {
+    font-family: 'Open Sans', sans-serif;
+    font-weight: 800;
+    /* font-style: italic; */
+    font-size: 24px !important;
+    text-align: left !important;
+    margin-bottom: 20px;
+    padding-left: 10px;
+}
+
 h2 {
     font-size: 18px;
     color: #666;

@@ -23,99 +23,120 @@ db.serialize(() => {
 });
 
 app.get('/', (req, res) => {
-    res.send('Server is running!');
+  res.send('Server is running!');
 });
 
 app.listen(PORT, () => {
-    console.log(`Server started on port ${PORT}`);
+  console.log(`Server started on port ${PORT}`);
 });
 
 // Fetch leaderboard
 app.get('/leaderboard', (req, res) => {
-    db.all("SELECT name, score, profile_picture FROM users ORDER BY score DESC", [], (err, rows) => {
-        if (err) {
-            return res.status(500).json({error: err.message});
-        }
-        // Convert the rows into an array of objects with the desired format
-        const leaderboard = rows.map(row => {
-            return {
-                username: row.name,
-                points: row.score,
-                profile_picture: row.profile_picture
-            };
-        });
-
-        // Render the EJS template with the leaderboard data
-        res.render('index', { leaderboard });
+  db.all("SELECT name, score, profile_picture FROM users ORDER BY score DESC", [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    // Convert the rows into an array of objects with the desired format
+    const leaderboard = rows.map(row => {
+      return {
+        username: row.name,
+        points: row.score,
+        profile_picture: row.profile_picture
+      };
     });
+
+    // Render the EJS template with the leaderboard data
+    res.render('index', { leaderboard });
+  });
 });
 
-
 slackEvents.on('message', async (event) => {
-    try {
-        const targetChannelId = "C012943FV6Y"; // #_shipped channel
+  try {
+    const targetChannelId = "C012943FV6Y"; // #_shipped channel
+    const targetChannelName = "";
 
-        if (event.subtype && event.subtype === 'bot_message' || // Ignore bot messages
-            event.channel !== targetChannelId || // Ignore messages from other channels
-            event.thread_ts && event.thread_ts !== event.ts) { // Ignore thread replies
-            return; 
-        }
-        // Fetch the user's name (or display name) from Slack and their profile picture
-        const userInfo = await webClient.users.info({ user: event.user });
-        const userName = userInfo.user.profile.display_name || userInfo.user.name;
-        const profileImage = userInfo.user.profile.image_192; // 192x192 size image
-
-        // Directly call the logic to update the user's score
-        const currentDate = new Date().toISOString().split('T')[0];
-
-        db.get("SELECT * FROM users WHERE name = ?", [userName], (err, user) => {
-            if (err) {
-                console.error(`Error retrieving user ${userName} from database:`, err.message);
-                return;
-            }
-            
-            if (user) {
-                if (!user.last_post_date) {
-                    // If the user has never posted before, set their score to 1 and store today's date.
-                    db.run("UPDATE users SET score = 1, last_post_date = ?, profile_picture = ? WHERE name = ?", [currentDate, profileImage, userName], (err) => {
-                        if (err) {
-                            console.error(`Error initializing score and post date for user ${userName}:`, err.message);
-                        }
-                    });
-                } else {
-                    const lastPostDate = new Date(user.last_post_date);
-                    const differenceInDays = (new Date(currentDate) - lastPostDate) / (1000 * 60 * 60 * 24);
-
-                    if (differenceInDays === 1) {
-                        // If the user posted the previous day, increment their score by 1.
-                        db.run("UPDATE users SET score = score + 1, last_post_date = ?, profile_picture = ? WHERE name = ?", [currentDate, profileImage, userName], (err) => {
-                            if (err) {
-                                console.error(`Error incrementing score for user ${userName}:`, err.message);
-                            }
-                        });
-                    } else if (differenceInDays > 1) {
-                        // If the user didn't post the previous day, reset their score to 1.
-                        db.run("UPDATE users SET score = 1, last_post_date = ?, profile_picture = ? WHERE name = ?", [currentDate, profileImage, userName], (err) => {
-                            if (err) {
-                                console.error(`Error resetting score for user ${userName}:`, err.message);
-                            }
-                        });
-                    } 
-                    // If the user has already posted today, do nothing.
-                }
-            } else {
-                // If user doesn't exist, add them with a score of 1 and today's date.
-                db.run("INSERT INTO users (name, score, last_post_date, profile_picture) VALUES (?, 1, ?, ?)", [userName, currentDate, profileImage], (err) => {
-                    if (err) {
-                        console.error(`Error adding user ${userName} to database:`, err.message);
-                    }
-                });
-            }
-        });
-
-    } catch (error) {
-        console.error('Error handling Slack event:', error.message, error.stack);
+    if (event.subtype && event.subtype === 'bot_message' || // Ignore bot messages
+      event.channel !== targetChannelId || // Ignore messages from other channels
+      event.thread_ts && event.thread_ts !== event.ts) { // Ignore thread replies
+      return;
     }
+
+    const userInfo = await webClient.users.info({ user: event.user });
+    const userName = userInfo.user.profile.display_name || userInfo.user.name;
+    const profileImage = userInfo.user.profile.image_192; // 192x192 size image
+
+    const currentDate = new Date().toISOString().split('T')[0];
+
+    const sendUserDM = async (userName) => {
+      db.get("SELECT score, (SELECT COUNT(DISTINCT score) FROM users WHERE score >= ?) AS rank FROM users WHERE name = ?", [0, userName], async (err, result) => {
+        if (err) {
+          console.error(`Error fetching score and rank for user ${userName}:`, err.message);
+          return;
+        }
+        const userScore = result.score;
+        const userRank = result.rank;
+
+        try {
+          const dmChannel = await webClient.conversations.open({ users: event.user });
+          const pointText = userScore === 1 ? 'point' : 'points'; // Determine the appropriate suffix
+          const message =`🎉 Congratulations! You've gained a point and now have ${userScore} ${pointText} on the <#${targetChannelId}|${targetChannelName}> leaderboard. You're currently ranked #${userRank}. Check the full leaderboard out here: cosy-bot.studioramen.repl.co/leaderboard`;
+          await webClient.chat.postMessage({
+            channel: dmChannel.channel.id,
+            text: message
+          });
+        } catch (dmError) {
+          console.error(`Error sending DM to user ${userName}:`, dmError.message);
+        }
+      });
+    };
+
+    db.get("SELECT * FROM users WHERE name = ?", [userName], (err, user) => {
+      if (err) {
+        console.error(`Error retrieving user ${userName} from database:`, err.message);
+        return;
+      }
+
+      if (user) {
+        if (!user.last_post_date) {
+          db.run("UPDATE users SET score = 1, last_post_date = ?, profile_picture = ? WHERE name = ?", [currentDate, profileImage, userName], async (err) => {
+            if (err) {
+              console.error(`Error initializing score and post date for user ${userName}:`, err.message);
+            }
+            await sendUserDM(userName);
+          });
+        } else {
+          const lastPostDate = new Date(user.last_post_date);
+          const differenceInDays = (new Date(currentDate) - lastPostDate) / (1000 * 60 * 60 * 24);
+
+          if (differenceInDays === 1) {
+            db.run("UPDATE users SET score = score + 1, last_post_date = ?, profile_picture = ? WHERE name = ?", [currentDate, profileImage, userName], async (err) => {
+              if (err) {
+                console.error(`Error incrementing score for user ${userName}:`, err.message);
+              }
+              await sendUserDM(userName);
+            });
+          } else if (differenceInDays > 1) {
+            db.run("UPDATE users SET score = 1, last_post_date = ?, profile_picture = ? WHERE name = ?", [currentDate, profileImage, userName], async (err) => {
+              if (err) {
+                console.error(`Error resetting score for user ${userName}:`, err.message);
+              }
+              await sendUserDM(userName);
+            });
+          }
+        }
+      } else {
+        db.run("INSERT INTO users (name, score, last_post_date, profile_picture) VALUES (?, 1, ?, ?)", [userName, currentDate, profileImage], async (err) => {
+          if (err) {
+            console.error(`Error adding user ${userName} to database:`, err.message);
+          }
+          await sendUserDM(userName);
+        });
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling Slack event:', error.message, error.stack);
+  }
 });
 
 app.use('/slack/events', slackEvents.requestListener());
