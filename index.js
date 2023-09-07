@@ -3,6 +3,7 @@ const sqlite3 = require('sqlite3');
 const { createEventAdapter } = require('@slack/events-api');
 const { WebClient } = require('@slack/web-api');
 const bodyParser = require('body-parser');
+const cron = require('node-cron');
 
 // SQLite database setup
 const db = new sqlite3.Database('./database.db');
@@ -15,6 +16,7 @@ const webClient = new WebClient(SLACK_TOKEN);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
 app.set('view engine', 'ejs');
 app.use(express.static('public'));
 
@@ -24,10 +26,6 @@ db.serialize(() => {
 
 app.get('/', (req, res) => {
   res.send('Server is running!');
-});
-
-app.listen(PORT, () => {
-  console.log(`Server started on port ${PORT}`);
 });
 
 // Fetch leaderboard
@@ -50,6 +48,13 @@ app.get('/leaderboard', (req, res) => {
   });
 });
 
+app.use('/slack/events', slackEvents.requestListener());
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server started on port ${PORT}`);
+});
+
 slackEvents.on('message', async (event) => {
   try {
     const targetChannelId = "C012943FV6Y"; // #_shipped channel
@@ -62,7 +67,7 @@ slackEvents.on('message', async (event) => {
     }
 
     const userInfo = await webClient.users.info({ user: event.user });
-    const userName = userInfo.user.profile.display_name || userInfo.user.name;
+    const userName = userInfo.user.profile.display_name || userInfo.user.real_name || userInfo.user.name;
     const profileImage = userInfo.user.profile.image_192; // 192x192 size image
 
     const currentDate = new Date().toISOString().split('T')[0];
@@ -139,4 +144,38 @@ slackEvents.on('message', async (event) => {
   }
 });
 
-app.use('/slack/events', slackEvents.requestListener());
+// Cron job to remove users that lose their streak
+function checkAndRemoveUsersFromLeaderboard() {
+  const todayUTC = new Date().toISOString().split('T')[0];
+  const yesterdayUTC = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  // Delete users from leaderboard who didn't post the previous day
+  db.run("DELETE FROM users WHERE last_post_date != ? AND last_post_date != ?", [todayUTC, yesterdayUTC], function(err) {
+    if (err) {
+      console.error(`Error removing users from the leaderboard:`, err.message);
+    } else {
+      console.log(`Removed ${this.changes} users who didn't maintain their streak by 00:00 from the leaderboard.`);
+    }
+  });
+}
+
+// Schedule a task to run at 01:30 UTC every day
+cron.schedule('30 1 * * *', () => {
+  checkAndRemoveUsersFromLeaderboard();
+});
+
+// Database back up
+const fs = require('fs');
+const path = require('path');
+
+function backupDatabase() {
+    const currentDate = new Date().toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
+    const source = './database.db';
+    const backupName = `backup_${currentDate}.db`;
+    const dest = path.join('./backups', backupName);  // Assuming you have a 'backups' directory
+
+    fs.copyFileSync(source, dest);
+    console.log(`Backup saved as ${backupName}`);
+}
+
+// Schedule a backup every day at 2am
+cron.schedule('0 2 * * *', backupDatabase);
